@@ -1,0 +1,51 @@
+name: CI (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      provider:
+        description: "github または blacksmith"
+        type: string
+        required: true
+      runner:
+        description: "runs-on に指定するラベル"
+        type: string
+        required: true
+      no-cache:
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: build image
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/build-ci-image
+        with:
+          provider: ${{ inputs.provider }}
+          no-cache: ${{ inputs.no-cache }}
+          load: "false"
+
+  check:
+    name: ${{ matrix.name }}
+    needs: build
+    runs-on: ${{ inputs.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: lint (Pint)
+            command: vendor/bin/pint --test
+          - name: static analysis (Larastan)
+            command: vendor/bin/phpstan analyse --no-progress --memory-limit=1G --error-format=github
+          - name: test (PHPUnit)
+            command: php artisan test
+    steps:
+      - uses: actions/checkout@v7
+      # build ジョブで保存したレイヤーキャッシュから復元してロードする
+      - uses: ./.github/actions/build-ci-image
+        with:
+          provider: ${{ inputs.provider }}
+      - name: Run
+        run: docker run --rm laravel-ci-bench:ci sh -c "${{ matrix.command }}"

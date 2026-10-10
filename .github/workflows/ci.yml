@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      no-cache:
+        description: "レイヤーキャッシュを使わずにビルドする（コールド計測）"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  github:
+    name: GitHub hosted
+    uses: ./.github/workflows/_ci.yml
+    with:
+      provider: github
+      runner: ubuntu-24.04
+      no-cache: ${{ inputs.no-cache == true }}
+
+  blacksmith:
+    name: Blacksmith
+    uses: ./.github/workflows/_ci.yml
+    with:
+      provider: blacksmith
+      runner: blacksmith-2vcpu-ubuntu-2404
+      no-cache: ${{ inputs.no-cache == true }}

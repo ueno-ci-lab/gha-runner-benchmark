@@ -1,0 +1,46 @@
+name: Build CI image
+description: CI 用 Docker イメージをビルドする（GitHub 標準 / Blacksmith でキャッシュ方式を切り替え）
+
+inputs:
+  provider:
+    description: "github または blacksmith"
+    required: true
+  no-cache:
+    description: "true の場合レイヤーキャッシュを使わずにビルドする（コールド計測用）"
+    default: "false"
+  load:
+    description: "ビルドしたイメージをローカルの Docker に読み込むか"
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    # ---- GitHub 標準: buildx + GitHub Actions キャッシュ ----
+    - if: inputs.provider == 'github'
+      uses: docker/setup-buildx-action@v4
+
+    - if: inputs.provider == 'github'
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: docker/php/Dockerfile
+        target: ci
+        tags: laravel-ci-bench:ci
+        load: ${{ inputs.load }}
+        no-cache: ${{ inputs.no-cache }}
+        cache-from: type=gha,scope=ci-image
+        cache-to: type=gha,scope=ci-image,mode=max
+
+    # ---- Blacksmith: 専用ビルダー（レイヤーキャッシュは sticky disk に自動保存） ----
+    - if: inputs.provider == 'blacksmith'
+      uses: useblacksmith/setup-docker-builder@v1
+
+    - if: inputs.provider == 'blacksmith'
+      uses: useblacksmith/build-push-action@v2
+      with:
+        context: .
+        file: docker/php/Dockerfile
+        target: ci
+        tags: laravel-ci-bench:ci
+        load: ${{ inputs.load }}
+        no-cache: ${{ inputs.no-cache }}
