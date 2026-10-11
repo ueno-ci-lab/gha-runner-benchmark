@@ -1,15 +1,31 @@
 name: CI
 
+# 手動実行（計測用）は条件を実行名に残し、集計スクリプトがここから条件を読み取る
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+      && format('[bench] runners={0} no-cache={1} blacksmith-vcpu={2}', inputs.runners, inputs.no-cache, inputs.blacksmith-vcpu)
+      || github.event.head_commit.message || github.event.pull_request.title }}
+
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
     inputs:
+      runners:
+        description: "実行するランナー"
+        type: choice
+        options: [both, github, blacksmith]
+        default: both
       no-cache:
         description: "レイヤーキャッシュを使わずにビルドする（コールド計測）"
         type: boolean
         default: false
+      blacksmith-vcpu:
+        description: "Blacksmith ランナーの vCPU 数"
+        type: choice
+        options: ["2", "4", "8"]
+        default: "2"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -18,6 +34,7 @@ concurrency:
 jobs:
   github:
     name: GitHub hosted
+    if: github.event_name != 'workflow_dispatch' || inputs.runners != 'blacksmith'
     uses: ./.github/workflows/_ci.yml
     with:
       provider: github
@@ -26,8 +43,12 @@ jobs:
 
   blacksmith:
     name: Blacksmith
+    # push / PR ではリポジトリ変数 BLACKSMITH_ENABLED が true のときだけ実行する
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.runners != 'github')
+      || (github.event_name != 'workflow_dispatch' && vars.BLACKSMITH_ENABLED == 'true')
     uses: ./.github/workflows/_ci.yml
     with:
       provider: blacksmith
-      runner: blacksmith-2vcpu-ubuntu-2404
+      runner: blacksmith-${{ inputs.blacksmith-vcpu || '2' }}vcpu-ubuntu-2404
       no-cache: ${{ inputs.no-cache == true }}
