@@ -33,3 +33,21 @@ API: `http://localhost:8000/api/tasks`
 | `../actions/build-ci-image` | イメージビルド。GitHub は `type=gha` キャッシュ、Blacksmith は専用ビルダーのレイヤーキャッシュを使用 |
 
 コールドビルドを計測する場合は Actions 画面から `workflow_dispatch` で `no-cache` を有効にして実行する。
+
+## 計測（`scripts/bench/`）
+
+前提: `gh` CLI で `ueno2121` としてログイン済みであること。
+
+```bash
+# CI を手動実行で N 回、順番に実行（runners: both / github / blacksmith、no-cache: true=コールド / false=ウォーム）
+scripts/bench/run.sh github true 10
+scripts/bench/run.sh github false 10
+scripts/bench/run.sh blacksmith false 10 4   # 第4引数は Blacksmith の vCPU 数（2 / 4 / 8）
+
+# 計測実行（実行名が [bench] で始まるもの）を集計し、Notion 取り込み用の CSV を出力
+python3 -I scripts/bench/collect.py -o scripts/bench/results.csv --summary
+```
+
+- push / PR で Blacksmith 側も実行するには、リポジトリ変数 `BLACKSMITH_ENABLED` を `true` にする（`gh variable set BLACKSMITH_ENABLED --body true`）。
+- 待ち時間は「ジョブ作成からランナーが最初のステップを開始するまで」、各ジョブの時間は「最初のステップ開始から完了まで」。
+- 課金対象はジョブごとに分単位で切り上げた合計。単価は GitHub 標準 $0.006/分、Blacksmith $0.004/分（2vCPU あたり）。
